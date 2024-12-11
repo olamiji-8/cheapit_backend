@@ -4,9 +4,14 @@ const cors = require('cors');
 
 const dbconnect = require('./config/dbconnect');
 const requestLogger = require('./middlewares/requestLogger');
+// const authRoutes = require("./routes/authRoutes");
+
+
+
 
 const app = express();
 app.use(cors());
+// app.use("/api/auth", authRoutes);
 
 const dotenv = require('dotenv').config();
 
