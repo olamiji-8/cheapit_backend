@@ -11,13 +11,17 @@ router.post("/register", async (req, res) => {
     const { fullName, email, phoneNumber, password, referralCode } = req.body;
 
     try {
+        // Hash the password
         const hashedPassword = await bcrypt.hash(password, 10);
-        const verificationCode = crypto.randomInt(100000, 999999).toString(); 
+
+        // Generate OTP and its expiration time
+        const verificationCode = crypto.randomInt(100000, 999999).toString();
         const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
         // Hash the verification code before storing it
         const hashedVerificationCode = crypto.createHash('sha256').update(verificationCode).digest('hex');
-        
+
+        // Create the new user object
         const newUser = new User({
             fullName,
             email,
@@ -26,14 +30,15 @@ router.post("/register", async (req, res) => {
             referralCode,
             verificationCode: hashedVerificationCode,
             otpExpiresAt,
-        });        
+        });
 
+        // Save the user to the database
         await newUser.save();
 
-        // Extract first name from full name for personalization
+        // Extract the first name from the full name for a personalized email
         const firstName = fullName.split(" ")[0];
 
-        // Send email with verification code
+        // Configure the email transporter
         const transporter = nodemailer.createTransport({
             service: "Gmail",
             auth: {
@@ -42,8 +47,9 @@ router.post("/register", async (req, res) => {
             },
         });
 
+        // Send the email with the OTP
         await transporter.sendMail({
-            from: process.env.EMAIL_USER,
+            from: `"Centry" <${process.env.EMAIL_USER}>`, // Use "Centry" as the sender name
             to: email,
             subject: "Verify Your Email",
             text: `
@@ -74,11 +80,14 @@ The Centry Team
             `,
         });
 
+        // Respond with success message
         res.status(201).json({ message: "User registered. Check email for verification code." });
     } catch (error) {
+        console.error(error);
         res.status(500).json({ error: "Failed to register user." });
     }
 });
+
 
 
 // Verify Email
