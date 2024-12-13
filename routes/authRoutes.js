@@ -12,16 +12,21 @@ router.post("/register", async (req, res) => {
 
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
-        const verificationCode = crypto.randomInt(100000, 999999).toString(); // Generate 6-digit code
+        const verificationCode = crypto.randomInt(100000, 999999).toString(); 
+        const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
 
+        // Hash the verification code before storing it
+        const hashedVerificationCode = crypto.createHash('sha256').update(verificationCode).digest('hex');
+        
         const newUser = new User({
             fullName,
             email,
             phoneNumber,
             password: hashedPassword,
             referralCode,
-            verificationCode,
-        });
+            verificationCode: hashedVerificationCode,
+            otpExpiresAt,
+        });        
 
         await newUser.save();
 
@@ -54,12 +59,24 @@ router.post("/verify", async (req, res) => {
     try {
         const user = await User.findOne({ email });
 
-        if (!user || user.verificationCode !== verificationCode) {
+        if (!user) {
+            return res.status(404).json({ error: "User not found." });
+        }
+
+        // Hash the entered verification code and compare with stored hash
+        const hashedInputCode = crypto.createHash('sha256').update(verificationCode).digest('hex');
+        
+        if (user.verificationCode !== hashedInputCode) {
             return res.status(400).json({ error: "Invalid verification code." });
+        }
+
+        if (user.otpExpiresAt && user.otpExpiresAt < Date.now()) {
+            return res.status(400).json({ error: "Verification code has expired." });
         }
 
         user.isVerified = true;
         user.verificationCode = null; // Clear the code
+        user.otpExpiresAt = null; // Clear the expiry time
         await user.save();
 
         res.status(200).json({ message: "Email verified. Proceed to create a PIN." });
@@ -67,6 +84,7 @@ router.post("/verify", async (req, res) => {
         res.status(500).json({ error: "Verification failed." });
     }
 });
+
 
 // Resend Code
 router.post("/resend-code", async (req, res) => {
@@ -80,7 +98,11 @@ router.post("/resend-code", async (req, res) => {
         }
 
         const newCode = crypto.randomInt(100000, 999999).toString();
-        user.verificationCode = newCode;
+        
+        // Hash the new verification code before saving
+        const hashedNewCode = crypto.createHash('sha256').update(newCode).digest('hex');
+
+        user.verificationCode = hashedNewCode;
         await user.save();
 
         const transporter = nodemailer.createTransport({
@@ -104,6 +126,7 @@ router.post("/resend-code", async (req, res) => {
     }
 });
 
+
 // Create PIN
 router.post("/create-pin", async (req, res) => {
     const { email, pin } = req.body;
@@ -115,7 +138,10 @@ router.post("/create-pin", async (req, res) => {
             return res.status(400).json({ error: "User not verified or not found." });
         }
 
-        user.pin = pin;
+        // Hash the PIN before saving
+        const hashedPin = await bcrypt.hash(pin, 10);
+
+        user.pin = hashedPin;
         await user.save();
 
         res.status(200).json({ message: "PIN created successfully." });
@@ -123,5 +149,6 @@ router.post("/create-pin", async (req, res) => {
         res.status(500).json({ error: "Failed to create PIN." });
     }
 });
+
 
 module.exports = router;
