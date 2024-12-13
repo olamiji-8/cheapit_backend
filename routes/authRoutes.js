@@ -13,7 +13,7 @@ router.post("/register", async (req, res) => {
     try {
         const hashedPassword = await bcrypt.hash(password, 10);
         const verificationCode = crypto.randomInt(100000, 999999).toString(); 
-        const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes from now
 
         // Hash the verification code before storing it
         const hashedVerificationCode = crypto.createHash('sha256').update(verificationCode).digest('hex');
@@ -30,6 +30,9 @@ router.post("/register", async (req, res) => {
 
         await newUser.save();
 
+        // Extract first name from full name for personalization
+        const firstName = fullName.split(" ")[0];
+
         // Send email with verification code
         const transporter = nodemailer.createTransport({
             service: "Gmail",
@@ -42,8 +45,33 @@ router.post("/register", async (req, res) => {
         await transporter.sendMail({
             from: process.env.EMAIL_USER,
             to: email,
-            subject: "Verify Your Account",
-            text: `Your verification code is ${verificationCode}`,
+            subject: "Verify Your Email",
+            text: `
+Hi ${firstName},
+
+Welcome to Centry – your all-in-one solution: bill payments - airtime, data, and utility in one app.
+
+To complete your signup, we just need to verify your email.
+
+Here’s your OTP: ${verificationCode}
+
+This code is valid for 10 minutes only. Enter this code in the app to confirm your email. If you didn’t sign up for Centry, please ignore this email.
+
+Let’s get started on this exciting journey together!
+
+Cheers,  
+The Centry Team
+            `,
+            html: `
+                <p>Hi <strong>${firstName}</strong>,</p>
+                <p>Welcome to <strong>Centry</strong> – your all-in-one solution: bill payments - airtime, data, and utility in one app.</p>
+                <p>To complete your signup, we just need to verify your email.</p>
+                <p><strong>Here’s your OTP: ${verificationCode}</strong></p>
+                <p>This code is valid for <strong>10 minutes only</strong>. Enter this code in the app to confirm your email. If you didn’t sign up for Centry, please ignore this email.</p>
+                <p>Let’s get started on this exciting journey together!</p>
+                <p>Cheers,</p>
+                <p>The Centry Team</p>
+            `,
         });
 
         res.status(201).json({ message: "User registered. Check email for verification code." });
@@ -51,6 +79,7 @@ router.post("/register", async (req, res) => {
         res.status(500).json({ error: "Failed to register user." });
     }
 });
+
 
 // Verify Email
 router.post("/verify", async (req, res) => {
@@ -105,6 +134,9 @@ router.post("/resend-code", async (req, res) => {
         user.verificationCode = hashedNewCode;
         await user.save();
 
+        // Extract first name from full name for personalization
+        const firstName = user.fullName.split(" ")[0];
+
         const transporter = nodemailer.createTransport({
             service: "Gmail",
             auth: {
@@ -117,7 +149,12 @@ router.post("/resend-code", async (req, res) => {
             from: process.env.EMAIL_USER,
             to: email,
             subject: "New Verification Code",
-            text: `Your new verification code is ${newCode}`,
+            text: `Hi ${firstName},\n\nYour new verification code is ${newCode}.\n\nThank you for choosing us!`,
+            html: `
+                <p>Hi <strong>${firstName}</strong>,</p>
+                <p>Your new verification code is <strong>${newCode}</strong>.</p>
+                <p>Thank you for choosing us!</p>
+            `,
         });
 
         res.status(200).json({ message: "Verification code resent." });
@@ -125,6 +162,7 @@ router.post("/resend-code", async (req, res) => {
         res.status(500).json({ error: "Failed to resend code." });
     }
 });
+
 
 
 // Create PIN
